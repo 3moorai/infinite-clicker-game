@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>لعبة النقر اللانهائية</title>
     <style>
         :root {
@@ -50,8 +53,9 @@
             padding: 15px 30px;
             background-color: var(--panel-bg);
             box-shadow: var(--shadow);
-            z-index: 10;
+            z-index: 100;
             border-bottom: 2px solid var(--border-color);
+            position: relative;
         }
 
         .stats h1 { font-size: 26px; margin-bottom: 5px; color: var(--primary-color); }
@@ -75,6 +79,8 @@
             display: flex;
             align-items: center;
             gap: 6px;
+            touch-action: manipulation;
+            user-select: none;
             transition: opacity 0.2s, transform 0.1s;
         }
 
@@ -88,7 +94,11 @@
 
         .reset-btn:hover {
             background-color: #c0392b !important;
-            transform: scale(1.02);
+            transform: scale(1.03);
+        }
+
+        .reset-btn:active {
+            transform: scale(0.97);
         }
 
         .save-badge {
@@ -279,8 +289,8 @@
         </div>
         <div class="controls">
             <span id="saveBadge" class="save-badge">💾 حفظ تلقائي: مفعل</span>
-            <button id="themeToggle">الوضع الداكن 🌙</button>
-            <button id="resetBtn" class="reset-btn" onclick="resetAllProgress()" title="إعادة تعيين التقدم والبدء من جديد">إعادة ضبط 🔄</button>
+            <button id="themeToggle" type="button">الوضع الداكن 🌙</button>
+            <button id="resetBtn" class="reset-btn" type="button" onclick="resetAllProgress(event)" title="مسح كل الكاش والبيانات والبدء من جديد">إعادة ضبط 🔄</button>
         </div>
     </header>
 
@@ -365,7 +375,7 @@
 
         // حفظ اللعبة في المتصفح
         function saveGame(visualFeedback = false) {
-            if (isResetting) return; // لا تحفظ إطلاقاً أثناء أو بعد إعادة التعيين
+            if (isResetting) return; // ممنوع الحفظ نهائياً أثناء التصفير
             try {
                 const state = {
                     score: score,
@@ -384,7 +394,7 @@
                     saveBadge.innerText = '💾 تم الحفظ!';
                     saveBadge.classList.add('saved');
                     setTimeout(() => {
-                        if (!isResetting) {
+                        if (!isResetting && saveBadge) {
                             saveBadge.innerText = '💾 حفظ تلقائي: مفعل';
                             saveBadge.classList.remove('saved');
                         }
@@ -448,25 +458,62 @@
             }
         });
 
-        // دالة إعادة الضبط الشاملة (البدء من جديد)
-        function resetAllProgress() {
-            const confirmed = confirm('هل أنت متأكد من رغبتك في مسح كل التقدم والبدء من جديد تماماً؟');
-            if (!confirmed) return;
+        // النقر التلقائي كل ثانية
+        setInterval(() => {
+            if (!isResetting && cps > 0) {
+                score += cps;
+                updateDisplay();
+                checkShop();
+                checkAchievements();
+            }
+        }, 1000);
 
-            // تفعيل وضع إعادة الضبط لمنع إعادة الحفظ التلقائي
-            isResetting = true;
-
-            // 1. تفريغ التخزين المحلي
-            try {
-                localStorage.removeItem(SAVE_KEY);
-                localStorage.removeItem(IMAGE_KEY);
-                localStorage.removeItem('infinite_clicker_save');
-                localStorage.removeItem('infinite_clicker_image');
-            } catch (e) {
-                console.error(e);
+        // دالة إعادة الضبط الشاملة ومسح كل الكاش والبيانات فوراً
+        function resetAllProgress(e) {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
             }
 
-            // 2. تصفير جميع المتغيرات بالذاكرة
+            // تفعيل وضع إعادة الضبط فوراً لإيقاف أي حفظ لاحق
+            isResetting = true;
+
+            // 1. مسح التخزين المحلي والجلسة بالكامل
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+            } catch (err) {
+                console.error('فشل مسح التخزين المحلي:', err);
+            }
+
+            // 2. مسح كاش المتصفح (CacheStorage API)
+            try {
+                if ('caches' in window) {
+                    caches.keys().then(keys => {
+                        keys.forEach(k => caches.delete(k));
+                    });
+                }
+            } catch (err) {}
+
+            // 3. مسح الكوكيز
+            try {
+                document.cookie.split(";").forEach(c => {
+                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+                });
+            } catch (err) {}
+
+            // 4. مسح أي قواعد بيانات IndexedDB
+            try {
+                if (window.indexedDB && indexedDB.databases) {
+                    indexedDB.databases().then(dbs => {
+                        dbs.forEach(db => {
+                            if (db.name) indexedDB.deleteDatabase(db.name);
+                        });
+                    });
+                }
+            } catch (err) {}
+
+            // 5. تصفير المتغيرات بالذاكرة
             score = 0;
             clickPower = 1;
             cps = 0;
@@ -476,7 +523,7 @@
             nextAchievementScore = 100;
             achievementsHistory = [];
 
-            // 3. إعادة ضبط الصورة
+            // 6. تصفير عناصر الواجهة فوراً أمام المستخدم
             const userImg = document.getElementById('userImage');
             const placeholder = document.getElementById('placeholder');
             const imageUpload = document.getElementById('imageUpload');
@@ -487,27 +534,33 @@
             if (placeholder) placeholder.style.display = 'block';
             if (imageUpload) imageUpload.value = '';
 
-            // 4. تحديث الواجهة فوراً أمام المستخدم
             achievementsList.innerHTML = '';
             renderShop();
             updateDisplay();
 
-            // 5. إظهار إشعار تأكيدي
-            showToast('🔄 تمت إعادة ضبط اللعبة بالكامل بنجاح!');
             if (saveBadge) {
-                saveBadge.innerText = '🔄 تم التصفير';
+                saveBadge.innerText = '🔄 تم مسح الكاش بالكامل';
                 saveBadge.classList.add('saved');
             }
 
-            // 6. إعادة تعيين الحفظ النظيف بعد لحظة وجيزة
+            showToast('🔄 تم مسح كافة البيانات والكاش وإعادة الضبط بنجاح!');
+
+            // 7. إعادة تحميل نظيفة مع كسر أي كاش بالمتصفح
             setTimeout(() => {
-                isResetting = false;
-                saveGame(false);
-                if (saveBadge) {
-                    saveBadge.innerText = '💾 حفظ تلقائي: مفعل';
-                    saveBadge.classList.remove('saved');
+                try {
+                    const cleanUrl = window.location.href.split('?')[0] + '?clear=' + Date.now();
+                    window.location.replace(cleanUrl);
+                } catch (e) {
+                    window.location.reload();
                 }
-            }, 1000);
+            }, 300);
+        }
+
+        // إتاحة الدالة للنطاق العام
+        window.resetAllProgress = resetAllProgress;
+        if (resetBtn) {
+            resetBtn.addEventListener('click', resetAllProgress);
+            resetBtn.addEventListener('touchend', resetAllProgress);
         }
 
         // رفع الصورة وحفظها
@@ -664,16 +717,6 @@
             container.appendChild(toast);
             setTimeout(() => { toast.remove(); }, 4000);
         }
-
-        // النقر التلقائي كل ثانية
-        setInterval(() => {
-            if (cps > 0) {
-                score += cps;
-                updateDisplay();
-                checkShop();
-                checkAchievements();
-            }
-        }, 1000);
 
         // تحديث النصوص
         function updateDisplay() {
