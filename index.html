@@ -1,0 +1,490 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة النقر اللانهائية</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --text-color: #333;
+            --panel-bg: #ffffff;
+            --primary-color: #4CAF50;
+            --primary-hover: #45a049;
+            --border-color: #e0e0e0;
+            --shadow: 0 4px 10px rgba(0,0,0,0.08);
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #121212;
+            --text-color: #e6e6e6;
+            --panel-bg: #1e1e1e;
+            --primary-color: #bb86fc;
+            --primary-hover: #9965f4;
+            --border-color: #333;
+            --shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* الشريط العلوي */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 30px;
+            background-color: var(--panel-bg);
+            box-shadow: var(--shadow);
+            z-index: 10;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .stats h1 { font-size: 26px; margin-bottom: 5px; color: var(--primary-color); }
+        .stats p { font-size: 15px; font-weight: bold; opacity: 0.8; }
+
+        .controls button {
+            background-color: var(--primary-color);
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        /* تقسيم الشاشة لـ 3 أعمدة لتناسب الشاشات الكبيرة */
+        main {
+            display: grid;
+            grid-template-columns: 250px 1fr 300px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* عمود الأوسمة (يسار) */
+        .achievements-area {
+            background-color: var(--panel-bg);
+            border-left: 1px solid var(--border-color);
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: var(--shadow);
+        }
+        
+        .achievements-area h2, .shop-area h2 {
+            margin-bottom: 20px;
+            text-align: center;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .achievement-item {
+            display: flex;
+            align-items: center;
+            background-color: var(--bg-color);
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--primary-color);
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .achievement-icon { font-size: 24px; margin-left: 10px; }
+        .achievement-info h4 { font-size: 14px; margin-bottom: 2px; }
+        .achievement-info p { font-size: 11px; opacity: 0.7; }
+
+        /* منطقة النقر (وسط) */
+        .clicker-area {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            position: relative;
+        }
+
+        .upload-section { margin-bottom: 40px; }
+        .upload-section input[type="file"] { display: none; }
+        .upload-label {
+            background-color: transparent;
+            color: var(--primary-color);
+            border: 2px dashed var(--primary-color);
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .upload-label:hover { background-color: var(--primary-color); color: #fff; }
+
+        .image-container {
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: var(--panel-bg);
+            border: 6px solid var(--primary-color);
+            transition: transform 0.05s;
+            /* منع تحديد العناصر وحل مشكلة توقف النقر */
+            user-select: none;
+            -webkit-user-drag: none;
+            touch-action: manipulation; 
+        }
+
+        .image-container:active { transform: scale(0.92); }
+
+        .image-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            user-select: none;
+            pointer-events: none; /* يضمن أن النقر يتم على الحاوية دائماً */
+        }
+
+        /* عمود المتجر (يمين) */
+        .shop-area {
+            background-color: var(--panel-bg);
+            border-right: 1px solid var(--border-color);
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: var(--shadow);
+        }
+
+        .shop-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background-color: var(--bg-color);
+            margin-bottom: 12px;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .shop-item:hover:not(.disabled) { transform: translateY(-2px); border-color: var(--primary-color); }
+        .shop-item.disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(100%); }
+        .item-info h3 { font-size: 15px; margin-bottom: 4px; }
+        .item-info p { font-size: 12px; color: gray; }
+        .item-cost { font-weight: bold; color: var(--primary-color); font-size: 14px; }
+        .item-owned { font-size: 11px; background: var(--primary-color); color: white; padding: 2px 6px; border-radius: 10px; margin-top: 5px; display: inline-block;}
+
+        /* إشعارات الأوسمة */
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+        }
+        .toast {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-top: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            animation: slideIn 0.5s ease-out, fadeOut 0.5s ease-in 3.5s forwards;
+        }
+        
+        @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { to { opacity: 0; transform: translateY(20px); } }
+
+        /* تأثيرات النقر البصرية (الأرقام المتطايرة) */
+        .click-floating-text {
+            position: absolute;
+            color: var(--primary-color);
+            font-weight: bold;
+            font-size: 20px;
+            pointer-events: none;
+            animation: floatUp 1s ease-out forwards;
+            z-index: 50;
+        }
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-50px) scale(1.5); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="stats">
+            <h1>النقاط: <span id="scoreDisplay">0</span></h1>
+            <p>نقاط/ثانية: <span id="cpsDisplay">0</span> | قوة النقرة: <span id="clickPowerDisplay">1</span></p>
+        </div>
+        <div class="controls">
+            <button id="themeToggle">الوضع الداكن 🌙</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- قسم الأوسمة (يتحدث تلقائياً) -->
+        <aside class="achievements-area">
+            <h2>الأوسمة 🏆</h2>
+            <div id="achievementsList">
+                <!-- الأوسمة ستظهر هنا -->
+            </div>
+        </aside>
+
+        <!-- منطقة اللعب -->
+        <section class="clicker-area" id="mainArea">
+            <div class="upload-section">
+                <label for="imageUpload" class="upload-label">ارفع صورتك 📷</label>
+                <input type="file" id="imageUpload" accept="image/*">
+            </div>
+
+            <div class="image-container" id="clickArea">
+                <div id="placeholder" style="text-align: center; opacity: 0.5;">اختر صورة لتبدأ</div>
+                <img id="userImage" src="" alt="" style="display: none;">
+            </div>
+        </section>
+
+        <!-- قسم المتجر اللانهائي -->
+        <aside class="shop-area">
+            <h2>المتجر 🛒</h2>
+            <div id="shopList">
+                <!-- المتجر يتم توليده عبر الجافاسكربت -->
+            </div>
+        </aside>
+    </main>
+
+    <div id="toast-container"></div>
+
+    <script>
+        // متغيرات اللعبة الأساسية
+        let score = 0;
+        let clickPower = 1;
+        let cps = 0;
+        let totalClicks = 0;
+
+        // دالة لتنسيق الأرقام الكبيرة (K, M, B, T) حتى لا يخرب التصميم
+        function formatNumber(num) {
+            if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
+            if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+            if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+            if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
+            return Math.floor(num).toString();
+        }
+
+        // أسماء للمتجر اللانهائي
+        const shopNames = ["مؤشر قوي", "نقر تلقائي", "مصنع نقرات", "منجم ذهب", "مفاعل نووي", "مركبة فضائية", "طاقة كمية", "ثقب أسود", "أكوان متعددة", "طاقة الماتريكس"];
+        let shopData = [
+            { id: 0, name: "مؤشر قوي 👆", baseCost: 15, cost: 15, cps: 0, clickPower: 1, owned: 0 },
+            { id: 1, name: "نقر تلقائي 🤖", baseCost: 100, cost: 100, cps: 1, clickPower: 0, owned: 0 },
+            { id: 2, name: "مصنع نقرات 🏭", baseCost: 1100, cost: 1100, cps: 8, clickPower: 0, owned: 0 }
+        ];
+
+        // نظام الأوسمة اللانهائي
+        let nextAchievementScore = 100;
+        let achievementLevel = 1;
+
+        // عناصر الواجهة
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const cpsDisplay = document.getElementById('cpsDisplay');
+        const clickPowerDisplay = document.getElementById('clickPowerDisplay');
+        const clickArea = document.getElementById('clickArea');
+        const shopList = document.getElementById('shopList');
+        const achievementsList = document.getElementById('achievementsList');
+        const mainArea = document.getElementById('mainArea');
+
+        // رفع الصورة
+        document.getElementById('imageUpload').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('userImage').src = e.target.result;
+                    document.getElementById('userImage').style.display = 'block';
+                    document.getElementById('placeholder').style.display = 'none';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // النقر على الصورة مع تأثير الأرقام المتطايرة
+        clickArea.addEventListener('click', (e) => {
+            score += clickPower;
+            totalClicks++;
+            
+            // إضافة رقم متطاير مكان النقر
+            const floatingText = document.createElement('div');
+            floatingText.classList.add('click-floating-text');
+            floatingText.innerText = `+${formatNumber(clickPower)}`;
+            
+            // تحديد موقع النقر بدقة داخل منطقة اللعب
+            const rect = mainArea.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            floatingText.style.left = `${x}px`;
+            floatingText.style.top = `${y}px`;
+            mainArea.appendChild(floatingText);
+            
+            // إزالة الرقم بعد انتهاء الأنيميشن
+            setTimeout(() => { floatingText.remove(); }, 1000);
+
+            updateDisplay();
+            checkShop();
+            checkAchievements();
+        });
+
+        // توليد المتجر
+        function renderShop() {
+            shopList.innerHTML = '';
+            shopData.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = `shop-item ${score < item.cost ? 'disabled' : ''}`;
+                div.onclick = () => buyItem(index);
+                
+                let effectText = item.cps > 0 ? `+${formatNumber(item.cps)} نقطة/ث` : `+${formatNumber(item.clickPower)} قوة نقر`;
+
+                div.innerHTML = `
+                    <div class="item-info">
+                        <h3>${item.name}</h3>
+                        <p>${effectText}</p>
+                        <div class="item-owned">مملوك: ${item.owned}</div>
+                    </div>
+                    <div class="item-cost">${formatNumber(item.cost)} نقطة</div>
+                `;
+                shopList.appendChild(div);
+            });
+        }
+
+        // عملية الشراء وإنشاء عناصر لا نهائية
+        function buyItem(index) {
+            let item = shopData[index];
+            if (score >= item.cost) {
+                score -= item.cost;
+                item.owned++;
+                clickPower += item.clickPower;
+                cps += item.cps;
+                
+                // زيادة السعر (مضاعفة بنسبة 15%)
+                item.cost = Math.ceil(item.baseCost * Math.pow(1.15, item.owned));
+
+                // إذا اشترى اللاعب العنصر الأخير في المتجر، أضف عنصراً جديداً أغلى وأقوى لضمان عدم انتهاء اللعبة
+                if (index === shopData.length - 1) {
+                    let nextId = shopData.length;
+                    let nameBase = shopNames[nextId] || `قوة غامضة مستوى ${nextId - shopNames.length + 1}`;
+                    let newItem = {
+                        id: nextId,
+                        name: `${nameBase} 🌟`,
+                        baseCost: item.baseCost * 10,
+                        cost: item.baseCost * 10,
+                        cps: item.cps > 0 ? item.cps * 8 + 10 : 0,
+                        clickPower: item.clickPower > 0 ? item.clickPower * 8 : (item.cps > 0 ? 0 : 50),
+                        owned: 0
+                    };
+                    shopData.push(newItem);
+                }
+
+                updateDisplay();
+                renderShop();
+                checkAchievements();
+            }
+        }
+
+        // تحديث حالة الأزرار بدون إعادة رسم المتجر بالكامل (للأداء)
+        function checkShop() {
+            const items = shopList.children;
+            for (let i = 0; i < items.length; i++) {
+                if (score >= shopData[i].cost) {
+                    items[i].classList.remove('disabled');
+                } else {
+                    items[i].classList.add('disabled');
+                }
+            }
+        }
+
+        // نظام الأوسمة اللانهائي (يعتمد على مضاعفات النقاط)
+        function checkAchievements() {
+            if (score >= nextAchievementScore || totalClicks >= nextAchievementScore) {
+                let text = `تجاوزت ${formatNumber(nextAchievementScore)} نقطة/نقرة!`;
+                showToast(`🏆 وسام المستوى ${achievementLevel}: ${text}`);
+                
+                // إضافة الوسام للقائمة الجانبية
+                const achDiv = document.createElement('div');
+                achDiv.className = 'achievement-item';
+                achDiv.innerHTML = `
+                    <div class="achievement-icon">🎖️</div>
+                    <div class="achievement-info">
+                        <h4>مستوى ${achievementLevel}</h4>
+                        <p>${text}</p>
+                    </div>
+                `;
+                // إضافته في الأعلى
+                achievementsList.insertBefore(achDiv, achievementsList.firstChild);
+
+                achievementLevel++;
+                nextAchievementScore *= 5; // الهدف القادم مضروب في 5 ليكون التحدي مستمراً
+            }
+        }
+
+        // إشعار الأوسمة (Toast)
+        function showToast(message) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerText = message;
+            container.appendChild(toast);
+            setTimeout(() => { toast.remove(); }, 4000);
+        }
+
+        // النقر التلقائي (يعمل كل ثانية)
+        setInterval(() => {
+            if (cps > 0) {
+                score += cps;
+                updateDisplay();
+                checkShop();
+                checkAchievements();
+            }
+        }, 1000);
+
+        // تحديث النصوص
+        function updateDisplay() {
+            scoreDisplay.innerText = formatNumber(score);
+            cpsDisplay.innerText = formatNumber(cps);
+            clickPowerDisplay.innerText = formatNumber(clickPower);
+        }
+
+        // تغيير الثيم
+        const themeToggle = document.getElementById('themeToggle');
+        themeToggle.addEventListener('click', () => {
+            if (document.body.getAttribute('data-theme') === 'dark') {
+                document.body.removeAttribute('data-theme');
+                themeToggle.innerText = 'الوضع الداكن 🌙';
+            } else {
+                document.body.setAttribute('data-theme', 'dark');
+                themeToggle.innerText = 'الوضع الفاتح ☀️';
+            }
+        });
+
+        // تهيئة مبدئية
+        renderShop();
+        updateDisplay();
+    </script>
+</body>
+</html>
