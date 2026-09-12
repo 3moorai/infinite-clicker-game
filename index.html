@@ -75,6 +75,7 @@
             display: flex;
             align-items: center;
             gap: 6px;
+            transition: opacity 0.2s, transform 0.1s;
         }
 
         .controls button:hover {
@@ -87,6 +88,7 @@
 
         .reset-btn:hover {
             background-color: #c0392b !important;
+            transform: scale(1.02);
         }
 
         .save-badge {
@@ -278,7 +280,7 @@
         <div class="controls">
             <span id="saveBadge" class="save-badge">💾 حفظ تلقائي: مفعل</span>
             <button id="themeToggle">الوضع الداكن 🌙</button>
-            <button id="resetBtn" class="reset-btn" title="إعادة تعيين التقدم والبدء من جديد">إعادة ضبط 🔄</button>
+            <button id="resetBtn" class="reset-btn" onclick="resetAllProgress()" title="إعادة تعيين التقدم والبدء من جديد">إعادة ضبط 🔄</button>
         </div>
     </header>
 
@@ -338,6 +340,7 @@
         let nextAchievementScore = 100;
         let achievementLevel = 1;
         let achievementsHistory = [];
+        let isResetting = false; // حماية تمنع الحفظ أثناء إعادة الضبط
 
         // عناصر الواجهة
         const scoreDisplay = document.getElementById('scoreDisplay');
@@ -362,6 +365,7 @@
 
         // حفظ اللعبة في المتصفح
         function saveGame(visualFeedback = false) {
+            if (isResetting) return; // لا تحفظ إطلاقاً أثناء أو بعد إعادة التعيين
             try {
                 const state = {
                     score: score,
@@ -380,8 +384,10 @@
                     saveBadge.innerText = '💾 تم الحفظ!';
                     saveBadge.classList.add('saved');
                     setTimeout(() => {
-                        saveBadge.innerText = '💾 حفظ تلقائي: مفعل';
-                        saveBadge.classList.remove('saved');
+                        if (!isResetting) {
+                            saveBadge.innerText = '💾 حفظ تلقائي: مفعل';
+                            saveBadge.classList.remove('saved');
+                        }
                     }, 1200);
                 }
             } catch (err) {
@@ -430,23 +436,79 @@
 
         // حفظ تلقائي كل 5 ثواني
         setInterval(() => {
-            saveGame(true);
+            if (!isResetting) {
+                saveGame(true);
+            }
         }, 5000);
 
-        // حفظ إضافي عند إغلاق المتصفح أو عمل ريفرش مباشرة
+        // حفظ إضافي عند إغلاق المتصفح أو عمل ريفرش
         window.addEventListener('beforeunload', () => {
-            saveGame(false);
-        });
-
-        // زر إعادة الضبط (البدء من جديد)
-        resetBtn.addEventListener('click', () => {
-            const confirmed = confirm('هل أنت متأكد من رغبتك في إعادة ضبط كل شيء والبدء من جديد من الصفر؟');
-            if (confirmed) {
-                localStorage.removeItem(SAVE_KEY);
-                localStorage.removeItem(IMAGE_KEY);
-                location.reload();
+            if (!isResetting) {
+                saveGame(false);
             }
         });
+
+        // دالة إعادة الضبط الشاملة (البدء من جديد)
+        function resetAllProgress() {
+            const confirmed = confirm('هل أنت متأكد من رغبتك في مسح كل التقدم والبدء من جديد تماماً؟');
+            if (!confirmed) return;
+
+            // تفعيل وضع إعادة الضبط لمنع إعادة الحفظ التلقائي
+            isResetting = true;
+
+            // 1. تفريغ التخزين المحلي
+            try {
+                localStorage.removeItem(SAVE_KEY);
+                localStorage.removeItem(IMAGE_KEY);
+                localStorage.removeItem('infinite_clicker_save');
+                localStorage.removeItem('infinite_clicker_image');
+            } catch (e) {
+                console.error(e);
+            }
+
+            // 2. تصفير جميع المتغيرات بالذاكرة
+            score = 0;
+            clickPower = 1;
+            cps = 0;
+            totalClicks = 0;
+            shopData = JSON.parse(JSON.stringify(defaultShopData));
+            achievementLevel = 1;
+            nextAchievementScore = 100;
+            achievementsHistory = [];
+
+            // 3. إعادة ضبط الصورة
+            const userImg = document.getElementById('userImage');
+            const placeholder = document.getElementById('placeholder');
+            const imageUpload = document.getElementById('imageUpload');
+            if (userImg) {
+                userImg.src = '';
+                userImg.style.display = 'none';
+            }
+            if (placeholder) placeholder.style.display = 'block';
+            if (imageUpload) imageUpload.value = '';
+
+            // 4. تحديث الواجهة فوراً أمام المستخدم
+            achievementsList.innerHTML = '';
+            renderShop();
+            updateDisplay();
+
+            // 5. إظهار إشعار تأكيدي
+            showToast('🔄 تمت إعادة ضبط اللعبة بالكامل بنجاح!');
+            if (saveBadge) {
+                saveBadge.innerText = '🔄 تم التصفير';
+                saveBadge.classList.add('saved');
+            }
+
+            // 6. إعادة تعيين الحفظ النظيف بعد لحظة وجيزة
+            setTimeout(() => {
+                isResetting = false;
+                saveGame(false);
+                if (saveBadge) {
+                    saveBadge.innerText = '💾 حفظ تلقائي: مفعل';
+                    saveBadge.classList.remove('saved');
+                }
+            }, 1000);
+        }
 
         // رفع الصورة وحفظها
         document.getElementById('imageUpload').addEventListener('change', function(event) {
