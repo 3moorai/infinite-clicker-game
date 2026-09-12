@@ -57,21 +57,61 @@
         .stats h1 { font-size: 26px; margin-bottom: 5px; color: var(--primary-color); }
         .stats p { font-size: 15px; font-weight: bold; opacity: 0.8; }
 
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
         .controls button {
             background-color: var(--primary-color);
             color: #fff;
             border: none;
-            padding: 10px 20px;
+            padding: 10px 18px;
             border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
             font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .controls button:hover {
+            opacity: 0.9;
+        }
+
+        .reset-btn {
+            background-color: #e74c3c !important;
+        }
+
+        .reset-btn:hover {
+            background-color: #c0392b !important;
+        }
+
+        .save-badge {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 20px;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            opacity: 0.85;
+            transition: all 0.3s ease;
+        }
+
+        .save-badge.saved {
+            background-color: var(--primary-color);
+            color: #ffffff;
+            border-color: var(--primary-color);
+            opacity: 1;
         }
 
         /* تقسيم الشاشة لـ 3 أعمدة لتناسب الشاشات الكبيرة */
         main {
             display: grid;
-            grid-template-columns: 250px 1fr 300px;
+            grid-template-columns: 260px 1fr 320px;
             flex: 1;
             overflow: hidden;
         }
@@ -236,7 +276,9 @@
             <p>نقاط/ثانية: <span id="cpsDisplay">0</span> | قوة النقرة: <span id="clickPowerDisplay">1</span></p>
         </div>
         <div class="controls">
+            <span id="saveBadge" class="save-badge">💾 حفظ تلقائي: مفعل</span>
             <button id="themeToggle">الوضع الداكن 🌙</button>
+            <button id="resetBtn" class="reset-btn" title="إعادة تعيين التقدم والبدء من جديد">إعادة ضبط 🔄</button>
         </div>
     </header>
 
@@ -274,32 +316,28 @@
     <div id="toast-container"></div>
 
     <script>
-        // متغيرات اللعبة الأساسية
-        let score = 0;
-        let clickPower = 1;
-        let cps = 0;
-        let totalClicks = 0;
+        // مفاتيح التخزين المحلي
+        const SAVE_KEY = 'infinite_clicker_save_v1';
+        const IMAGE_KEY = 'infinite_clicker_image_v1';
+        const THEME_KEY = 'infinite_clicker_theme_v1';
 
-        // دالة لتنسيق الأرقام الكبيرة (K, M, B, T) حتى لا يخرب التصميم
-        function formatNumber(num) {
-            if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
-            if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
-            if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-            if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
-            return Math.floor(num).toString();
-        }
-
-        // أسماء للمتجر اللانهائي
-        const shopNames = ["مؤشر قوي", "نقر تلقائي", "مصنع نقرات", "منجم ذهب", "مفاعل نووي", "مركبة فضائية", "طاقة كمية", "ثقب أسود", "أكوان متعددة", "طاقة الماتريكس"];
-        let shopData = [
+        // المتغيرات الافتراضية
+        const defaultShopData = [
             { id: 0, name: "مؤشر قوي 👆", baseCost: 15, cost: 15, cps: 0, clickPower: 1, owned: 0 },
             { id: 1, name: "نقر تلقائي 🤖", baseCost: 100, cost: 100, cps: 1, clickPower: 0, owned: 0 },
             { id: 2, name: "مصنع نقرات 🏭", baseCost: 1100, cost: 1100, cps: 8, clickPower: 0, owned: 0 }
         ];
 
-        // نظام الأوسمة اللانهائي
+        const shopNames = ["مؤشر قوي", "نقر تلقائي", "مصنع نقرات", "منجم ذهب", "مفاعل نووي", "مركبة فضائية", "طاقة كمية", "ثقب أسود", "أكوان متعددة", "طاقة الماتريكس"];
+
+        let score = 0;
+        let clickPower = 1;
+        let cps = 0;
+        let totalClicks = 0;
+        let shopData = JSON.parse(JSON.stringify(defaultShopData));
         let nextAchievementScore = 100;
         let achievementLevel = 1;
+        let achievementsHistory = [];
 
         // عناصر الواجهة
         const scoreDisplay = document.getElementById('scoreDisplay');
@@ -309,16 +347,123 @@
         const shopList = document.getElementById('shopList');
         const achievementsList = document.getElementById('achievementsList');
         const mainArea = document.getElementById('mainArea');
+        const saveBadge = document.getElementById('saveBadge');
+        const themeToggle = document.getElementById('themeToggle');
+        const resetBtn = document.getElementById('resetBtn');
 
-        // رفع الصورة
+        // دالة لتنسيق الأرقام الكبيرة
+        function formatNumber(num) {
+            if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
+            if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+            if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+            if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
+            return Math.floor(num).toString();
+        }
+
+        // حفظ اللعبة في المتصفح
+        function saveGame(visualFeedback = false) {
+            try {
+                const state = {
+                    score: score,
+                    clickPower: clickPower,
+                    cps: cps,
+                    totalClicks: totalClicks,
+                    shopData: shopData,
+                    achievementLevel: achievementLevel,
+                    nextAchievementScore: nextAchievementScore,
+                    achievementsHistory: achievementsHistory,
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+
+                if (visualFeedback && saveBadge) {
+                    saveBadge.innerText = '💾 تم الحفظ!';
+                    saveBadge.classList.add('saved');
+                    setTimeout(() => {
+                        saveBadge.innerText = '💾 حفظ تلقائي: مفعل';
+                        saveBadge.classList.remove('saved');
+                    }, 1200);
+                }
+            } catch (err) {
+                console.error('فشل في حفظ اللعبة:', err);
+            }
+        }
+
+        // استرجاع التقدم المحفوظ عند فتح اللعبة أو عمل Refresh
+        function loadGame() {
+            try {
+                const saved = localStorage.getItem(SAVE_KEY);
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    if (typeof data.score === 'number') score = data.score;
+                    if (typeof data.clickPower === 'number') clickPower = data.clickPower;
+                    if (typeof data.cps === 'number') cps = data.cps;
+                    if (typeof data.totalClicks === 'number') totalClicks = data.totalClicks;
+                    if (Array.isArray(data.shopData) && data.shopData.length > 0) shopData = data.shopData;
+                    if (typeof data.achievementLevel === 'number') achievementLevel = data.achievementLevel;
+                    if (typeof data.nextAchievementScore === 'number') nextAchievementScore = data.nextAchievementScore;
+                    if (Array.isArray(data.achievementsHistory)) achievementsHistory = data.achievementsHistory;
+                }
+
+                // استرجاع الصورة المرفوعة سابقاً
+                const savedImage = localStorage.getItem(IMAGE_KEY);
+                if (savedImage) {
+                    const userImg = document.getElementById('userImage');
+                    userImg.src = savedImage;
+                    userImg.style.display = 'block';
+                    document.getElementById('placeholder').style.display = 'none';
+                }
+
+                // استرجاع الثيم (داكن / فاتح)
+                const savedTheme = localStorage.getItem(THEME_KEY);
+                if (savedTheme === 'dark') {
+                    document.body.setAttribute('data-theme', 'dark');
+                    themeToggle.innerText = 'الوضع الفاتح ☀️';
+                } else if (savedTheme === 'light') {
+                    document.body.removeAttribute('data-theme');
+                    themeToggle.innerText = 'الوضع الداكن 🌙';
+                }
+            } catch (err) {
+                console.error('فشل في استرجاع بيانات اللعبة:', err);
+            }
+        }
+
+        // حفظ تلقائي كل 5 ثواني
+        setInterval(() => {
+            saveGame(true);
+        }, 5000);
+
+        // حفظ إضافي عند إغلاق المتصفح أو عمل ريفرش مباشرة
+        window.addEventListener('beforeunload', () => {
+            saveGame(false);
+        });
+
+        // زر إعادة الضبط (البدء من جديد)
+        resetBtn.addEventListener('click', () => {
+            const confirmed = confirm('هل أنت متأكد من رغبتك في إعادة ضبط كل شيء والبدء من جديد من الصفر؟');
+            if (confirmed) {
+                localStorage.removeItem(SAVE_KEY);
+                localStorage.removeItem(IMAGE_KEY);
+                location.reload();
+            }
+        });
+
+        // رفع الصورة وحفظها
         document.getElementById('imageUpload').addEventListener('change', function(event) {
             const file = event.target.files[0];
             if (file) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    document.getElementById('userImage').src = e.target.result;
+                    const dataUrl = e.target.result;
+                    document.getElementById('userImage').src = dataUrl;
                     document.getElementById('userImage').style.display = 'block';
                     document.getElementById('placeholder').style.display = 'none';
+                    try {
+                        localStorage.setItem(IMAGE_KEY, dataUrl);
+                    } catch (err) {
+                        console.warn('الصورة كبيرة جداً للتخزين المحلي:', err);
+                    }
+                    saveGame(true);
                 };
                 reader.readAsDataURL(file);
             }
@@ -334,7 +479,6 @@
             floatingText.classList.add('click-floating-text');
             floatingText.innerText = `+${formatNumber(clickPower)}`;
             
-            // تحديد موقع النقر بدقة داخل منطقة اللعب
             const rect = mainArea.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
@@ -343,7 +487,6 @@
             floatingText.style.top = `${y}px`;
             mainArea.appendChild(floatingText);
             
-            // إزالة الرقم بعد انتهاء الأنيميشن
             setTimeout(() => { floatingText.remove(); }, 1000);
 
             updateDisplay();
@@ -382,10 +525,8 @@
                 clickPower += item.clickPower;
                 cps += item.cps;
                 
-                // زيادة السعر (مضاعفة بنسبة 15%)
                 item.cost = Math.ceil(item.baseCost * Math.pow(1.15, item.owned));
 
-                // إذا اشترى اللاعب العنصر الأخير في المتجر، أضف عنصراً جديداً أغلى وأقوى لضمان عدم انتهاء اللعبة
                 if (index === shopData.length - 1) {
                     let nextId = shopData.length;
                     let nameBase = shopNames[nextId] || `قوة غامضة مستوى ${nextId - shopNames.length + 1}`;
@@ -404,46 +545,55 @@
                 updateDisplay();
                 renderShop();
                 checkAchievements();
+                saveGame(false);
             }
         }
 
-        // تحديث حالة الأزرار بدون إعادة رسم المتجر بالكامل (للأداء)
+        // تحديث حالة الأزرار بدون إعادة رسم المتجر
         function checkShop() {
             const items = shopList.children;
             for (let i = 0; i < items.length; i++) {
-                if (score >= shopData[i].cost) {
+                if (shopData[i] && score >= shopData[i].cost) {
                     items[i].classList.remove('disabled');
-                } else {
+                } else if (items[i]) {
                     items[i].classList.add('disabled');
                 }
             }
         }
 
-        // نظام الأوسمة اللانهائي (يعتمد على مضاعفات النقاط)
-        function checkAchievements() {
-            if (score >= nextAchievementScore || totalClicks >= nextAchievementScore) {
-                let text = `تجاوزت ${formatNumber(nextAchievementScore)} نقطة/نقرة!`;
-                showToast(`🏆 وسام المستوى ${achievementLevel}: ${text}`);
-                
-                // إضافة الوسام للقائمة الجانبية
+        // رسم الأوسمة
+        function renderAchievements() {
+            achievementsList.innerHTML = '';
+            achievementsHistory.forEach(ach => {
                 const achDiv = document.createElement('div');
                 achDiv.className = 'achievement-item';
                 achDiv.innerHTML = `
                     <div class="achievement-icon">🎖️</div>
                     <div class="achievement-info">
-                        <h4>مستوى ${achievementLevel}</h4>
-                        <p>${text}</p>
+                        <h4>مستوى ${ach.level}</h4>
+                        <p>${ach.text}</p>
                     </div>
                 `;
-                // إضافته في الأعلى
-                achievementsList.insertBefore(achDiv, achievementsList.firstChild);
+                achievementsList.appendChild(achDiv);
+            });
+        }
+
+        // فحص الأوسمة
+        function checkAchievements() {
+            if (score >= nextAchievementScore || totalClicks >= nextAchievementScore) {
+                let text = `تجاوزت ${formatNumber(nextAchievementScore)} نقطة/نقرة!`;
+                showToast(`🏆 وسام المستوى ${achievementLevel}: ${text}`);
+                
+                achievementsHistory.unshift({ level: achievementLevel, text: text });
+                renderAchievements();
 
                 achievementLevel++;
-                nextAchievementScore *= 5; // الهدف القادم مضروب في 5 ليكون التحدي مستمراً
+                nextAchievementScore *= 5;
+                saveGame(false);
             }
         }
 
-        // إشعار الأوسمة (Toast)
+        // إشعار Toast
         function showToast(message) {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
@@ -453,7 +603,7 @@
             setTimeout(() => { toast.remove(); }, 4000);
         }
 
-        // النقر التلقائي (يعمل كل ثانية)
+        // النقر التلقائي كل ثانية
         setInterval(() => {
             if (cps > 0) {
                 score += cps;
@@ -471,19 +621,22 @@
         }
 
         // تغيير الثيم
-        const themeToggle = document.getElementById('themeToggle');
         themeToggle.addEventListener('click', () => {
             if (document.body.getAttribute('data-theme') === 'dark') {
                 document.body.removeAttribute('data-theme');
                 themeToggle.innerText = 'الوضع الداكن 🌙';
+                localStorage.setItem(THEME_KEY, 'light');
             } else {
                 document.body.setAttribute('data-theme', 'dark');
                 themeToggle.innerText = 'الوضع الفاتح ☀️';
+                localStorage.setItem(THEME_KEY, 'dark');
             }
         });
 
-        // تهيئة مبدئية
+        // تشغيل البداية
+        loadGame();
         renderShop();
+        renderAchievements();
         updateDisplay();
     </script>
 </body>
